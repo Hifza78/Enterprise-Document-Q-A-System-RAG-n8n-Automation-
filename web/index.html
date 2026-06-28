@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Enterprise Document Q&A — RAG Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1d212b;
+    --line: #2a2f3a;
+    --text: #e6e8ee;
+    --muted: #9aa3b2;
+    --accent: #5b8cff;
+    --accent-2: #38d39f;
+    --warn: #f0a020;
+    --bad: #f0506e;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  }
+  a { color: var(--accent); }
+  header {
+    padding: 22px 28px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 14px;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 650; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  .status-pill {
+    margin-left: auto; display: flex; align-items: center; gap: 8px;
+    font-size: 13px; padding: 6px 12px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--accent-2); box-shadow: 0 0 0 3px rgba(56,211,159,.18); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 0 3px rgba(240,80,110,.18); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 24px; display: grid; gap: 22px;
+         grid-template-columns: 1fr 1fr; }
+  .full { grid-column: 1 / -1; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 20px;
+  }
+  .card h2 { margin: 0 0 4px; font-size: 15px; }
+  .card .hint { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+  input[type=text], input[type=password], textarea, select {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 8px; padding: 10px 12px; font: inherit;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+    padding: 10px 16px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.ghost { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .btnrow { margin-top: 16px; display: flex; gap: 10px; align-items: center; }
+  .note { font-size: 12.5px; color: var(--muted); }
+
+  .callout {
+    background: rgba(91,140,255,.08); border: 1px solid rgba(91,140,255,.35);
+    border-radius: 8px; padding: 12px 14px; font-size: 13px; margin-bottom: 14px;
+  }
+  .callout b { color: var(--text); }
+
+  /* pipeline */
+  .pipe { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+  .step {
+    flex: 1; min-width: 120px; text-align: center; padding: 14px 8px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2);
+    position: relative; transition: all .25s ease; opacity: .55;
+  }
+  .step + .step { margin-left: 26px; }
+  .step::before {
+    content: "→"; position: absolute; left: -22px; top: 50%; transform: translateY(-50%);
+    color: var(--muted);
+  }
+  .step:first-child::before { content: ""; }
+  .step .n { font-size: 12px; color: var(--muted); }
+  .step .t { font-weight: 600; font-size: 13.5px; margin-top: 4px; }
+  .step.active { opacity: 1; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,140,255,.15); }
+  .step.done { opacity: 1; border-color: var(--accent-2); }
+  .step.done .t::after { content: " ✓"; color: var(--accent-2); }
+
+  /* chat */
+  .chat { display: flex; flex-direction: column; gap: 12px; }
+  .bubble { padding: 12px 14px; border-radius: 10px; max-width: 92%; white-space: pre-wrap; }
+  .bubble.user { align-self: flex-end; background: var(--accent); color: #fff; }
+  .bubble.bot { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--line); }
+  .sources { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-size: 12px; padding: 3px 9px; border-radius: 999px;
+    background: rgba(56,211,159,.12); border: 1px solid rgba(56,211,159,.4); color: var(--accent-2);
+  }
+  .matches { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  .matches .m { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+
+  .log { font-size: 12.5px; color: var(--muted); margin-top: 10px; min-height: 18px; }
+  .log.ok { color: var(--accent-2); }
+  .log.err { color: var(--bad); }
+  .spin { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--line);
+          border-top-color: var(--accent); border-radius: 50%; animation: s 0.8s linear infinite; vertical-align: -2px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Enterprise Document Q&A</h1>
+    <div class="sub">RAG over your documents · n8n + OpenAI + Pinecone</div>
+  </div>
+  <div class="status-pill"><span id="statusDot" class="dot"></span><span id="statusText">checking…</span></div>
+</header>
+
+<main>
+  <!-- SETUP -->
+  <section class="card full" id="setup">
+    <h2>1 · Setup — add your API keys</h2>
+    <p class="hint">Keys are saved to the local <code>.env</code> file on the server and never leave your machine. Nothing works until both keys are set.</p>
+    <p class="hint" id="savedNote" style="color:#16a34a;font-weight:600"></p>
+
+    <div class="callout">
+      <b>Where to get the keys:</b><br>
+      • Google Gemini (free) — <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → “Create API key” (starts with <code>AIza</code>). Used for answering.<br>
+      • Pinecone — <a href="https://app.pinecone.io" target="_blank" rel="noopener">app.pinecone.io</a> → API Keys (free “Starter” tier is enough). The index is created automatically on first use.<br>
+      <span class="hint">Embeddings run locally (fastembed) — no key needed for those.</span>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Gemini API key</label>
+        <input id="xaiKey" type="password" placeholder="AIza..." autocomplete="off" />
+      </div>
+      <div>
+        <label>Pinecone API key</label>
+        <input id="pineconeKey" type="password" placeholder="pcn-..." autocomplete="off" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Chat model (optional)</label>
+        <select id="chatModel">
+          <option value="gemini-2.5-flash">gemini-2.5-flash (default, free)</option>
+          <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+        </select>
+      </div>
+      <div>
+        <label>Pinecone index name (optional)</label>
+        <input id="indexName" type="text" placeholder="enterprise-docs" />
+      </div>
+    </div>
+    <div class="btnrow">
+      <button id="saveCfg">Save keys</button>
+      <span id="cfgLog" class="log"></span>
+    </div>
+  </section>
+
+  <!-- PIPELINE -->
+  <section class="card full">
+    <h2>How a question flows through the system</h2>
+    <p class="hint">This lights up step-by-step every time you ask a question below, so you can see exactly what RAG is doing.</p>
+    <div class="pipe" id="pipe">
+      <div class="step" data-step="0"><div class="n">step 1</div><div class="t">Your question</div></div>
+      <div class="step" data-step="1"><div class="n">step 2</div><div class="t">Embed</div></div>
+      <div class="step" data-step="2"><div class="n">step 3</div><div class="t">Pinecone search</div></div>
+      <div class="step" data-step="3"><div class="n">step 4</div><div class="t">Build prompt</div></div>
+      <div class="step" data-step="4"><div class="n">step 5</div><div class="t">OpenAI answer</div></div>
+      <div class="step" data-step="5"><div class="n">step 6</div><div class="t">Cited reply</div></div>
+    </div>
+  </section>
+
+  <!-- INGEST -->
+  <section class="card">
+    <h2>2 · Add documents</h2>
+    <p class="hint">Upload a file (pdf / docx / txt / md) or paste text. In production, n8n does this automatically when a file lands in a Google Drive folder.</p>
+
+    <label>Upload a file</label>
+    <div class="row">
+      <input id="fileInput" type="file" accept=".pdf,.docx,.txt,.md" style="padding:8px;" />
+      <button id="uploadBtn" class="ghost" style="flex:0 0 auto;">Ingest file</button>
+    </div>
+
+    <label>…or paste text</label>
+    <textarea id="pasteText" placeholder="Paste document text here…"></textarea>
+    <div class="row">
+      <input id="pasteSource" type="text" placeholder="source name, e.g. handbook.md" />
+      <button id="pasteBtn" class="ghost" style="flex:0 0 auto;">Ingest text</button>
+    </div>
+    <div id="ingestLog" class="log"></div>
+  </section>
+
+  <!-- CHAT -->
+  <section class="card">
+    <h2>3 · Ask a question</h2>
+    <p class="hint">Answers are written only from your indexed documents, with the source files cited.</p>
+    <div class="chat" id="chat"></div>
+    <label>Question</label>
+    <div class="row">
+      <input id="question" type="text" placeholder="e.g. How long does a laptop request take?" />
+      <button id="askBtn" style="flex:0 0 auto;">Ask</button>
+    </div>
+    <div id="chatLog" class="log"></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = (path, opts) => fetch(path, opts).then(async r => {
+  const body = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, body };
+});
+
+// ---- status -----------------------------------------------------------
+async function refreshStatus() {
+  try {
+    const { body } = await api('/api/status');
+    const ok = body.configured;
+    $('statusDot').className = 'dot ' + (ok ? 'ok' : 'bad');
+    $('statusText').textContent = ok
+      ? `ready · ${body.chat_model}`
+      : (body.has_xai ? 'Pinecone key missing' : body.has_pinecone ? 'Gemini key missing' : 'add API keys to start');
+    if (body.index_name) $('indexName').placeholder = body.index_name;
+
+    // Reflect already-saved keys so you don't have to re-enter them every visit.
+    const savedHint = '✓ already saved — leave blank to keep it';
+    $('xaiKey').placeholder      = body.has_xai      ? savedHint : 'AIza...';
+    $('pineconeKey').placeholder = body.has_pinecone ? savedHint : 'pcn-...';
+    if (body.chat_model) $('chatModel').value = body.chat_model;
+    const note = $('savedNote');
+    if (note) note.textContent = (body.has_xai && body.has_pinecone)
+      ? 'Both keys are already saved in .env on the server — you do not need to re-enter them.'
+      : '';
+    return ok;
+  } catch (e) {
+    $('statusText').textContent = 'server unreachable';
+    return false;
+  }
+}
+
+// ---- save config ------------------------------------------------------
+$('saveCfg').onclick = async () => {
+  const payload = {
+    xai_api_key: $('xaiKey').value.trim() || null,
+    pinecone_api_key: $('pineconeKey').value.trim() || null,
+    chat_model: $('chatModel').value,
+    index_name: $('indexName').value.trim() || null,
+  };
+  if (!payload.xai_api_key && !payload.pinecone_api_key) {
+    return setLog('cfgLog', 'Enter at least one key.', 'err');
+  }
+  setLog('cfgLog', '<span class="spin"></span> saving…');
+  const { ok, body } = await api('/api/config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  if (ok && body.configured) {
+    setLog('cfgLog', 'Saved — keys active. You can ingest and ask now.', 'ok');
+    $('xaiKey').value = ''; $('pineconeKey').value = '';
+  } else {
+    setLog('cfgLog', ok ? 'Saved, but still missing a key.' : 'Failed to save.', ok ? '' : 'err');
+  }
+  refreshStatus();
+};
+
+// ---- ingest -----------------------------------------------------------
+$('uploadBtn').onclick = async () => {
+  const f = $('fileInput').files[0];
+  if (!f) return setLog('ingestLog', 'Pick a file first.', 'err');
+  setLog('ingestLog', `<span class="spin"></span> ingesting ${f.name}…`);
+  const fd = new FormData(); fd.append('file', f);
+  const { ok, status, body } = await api('/api/upload', { method: 'POST', body: fd });
+  reportIngest(ok, status, body);
+};
+
+$('pasteBtn').onclick = async () => {
+  const text = $('pasteText').value.trim();
+  const source = $('pasteSource').value.trim() || 'pasted-text';
+  if (!text) return setLog('ingestLog', 'Paste some text first.', 'err');
+  setLog('ingestLog', `<span class="spin"></span> ingesting…`);
+  const { ok, status, body } = await api('/ingest', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, source }),
+  });
+  reportIngest(ok, status, body);
+};
+
+function reportIngest(ok, status, body) {
+  if (ok) setLog('ingestLog', `Indexed “${body.source}” → ${body.chunks_indexed} chunks.`, 'ok');
+  else if (status === 428) setLog('ingestLog', body.error, 'err');
+  else setLog('ingestLog', body.error || 'Ingest failed.', 'err');
+}
+
+// ---- ask --------------------------------------------------------------
+const STEPS = document.querySelectorAll('#pipe .step');
+function setStep(i, cls) { if (STEPS[i]) STEPS[i].className = 'step ' + cls; }
+function resetPipe() { STEPS.forEach(s => s.className = 'step'); }
+
+async function animatePipe() {
+  // Walk steps 0..4 with a small delay so the flow is visible while the
+  // request is in flight; step 5 is marked done when the answer arrives.
+  for (let i = 0; i < 5; i++) {
+    setStep(i, 'active');
+    await new Promise(r => setTimeout(r, 280));
+    setStep(i, 'done');
+  }
+}
+
+$('askBtn').onclick = ask;
+$('question').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
+
+async function ask() {
+  const q = $('question').value.trim();
+  if (!q) return;
+  addBubble('user', q);
+  $('question').value = '';
+  setLog('chatLog', '<span class="spin"></span> thinking…');
+  resetPipe();
+  const anim = animatePipe();
+
+  const { ok, status, body } = await api('/chat', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: q }),
+  });
+  await anim;
+
+  if (!ok) {
+    setStep(5, '');
+    const reason = body.error || 'Request failed.';
+    setLog('chatLog', reason, 'err');
+    addBubble('bot', '⚠️ ' + reason);
+    return;
+  }
+  setStep(5, 'done');
+  setLog('chatLog', '');
+  addAnswer(body);
+}
+
+// ---- rendering --------------------------------------------------------
+function addBubble(who, text) {
+  const div = document.createElement('div');
+  div.className = 'bubble ' + who;
+  div.textContent = text;
+  $('chat').appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  return div;
+}
+
+function addAnswer(body) {
+  const div = addBubble('bot', body.answer);
+  if (body.sources && body.sources.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'sources';
+    body.sources.forEach(s => {
+      const chip = document.createElement('span');
+      chip.className = 'chip'; chip.textContent = s; wrap.appendChild(chip);
+    });
+    div.appendChild(wrap);
+  }
+  if (body.matches && body.matches.length) {
+    const m = document.createElement('div');
+    m.className = 'matches';
+    m.innerHTML = '<div style="margin-bottom:4px;">retrieved passages:</div>' +
+      body.matches.map(x => `<div class="m"><span>${x.source} · chunk ${x.chunk_index}</span><span>score ${x.score}</span></div>`).join('');
+    div.appendChild(m);
+  }
+}
+
+function setLog(id, html, cls = '') { const el = $(id); el.className = 'log ' + cls; el.innerHTML = html; }
+
+refreshStatus();
+</script>
+</body>
+</html>

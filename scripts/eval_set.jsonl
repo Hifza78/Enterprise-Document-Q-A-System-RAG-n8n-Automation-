@@ -1,0 +1,5 @@
+{"question": "How long is the new-hire laptop request expected to take?", "expected_keywords": ["3", "business days"], "must_cite": true}
+{"question": "What is the company's default VPN region?", "expected_keywords": ["eu-west-1"], "must_cite": true}
+{"question": "Who approves a production deploy?", "expected_keywords": ["on-call lead"], "must_cite": true}
+{"question": "What is the password rotation policy?", "expected_keywords": ["90 days"], "must_cite": true}
+{"question": "Does the handbook mention a four-day work week?", "expected_keywords": [], "must_cite": false}

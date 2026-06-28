@@ -1,0 +1,69 @@
+{
+  "name": "RAG - Document Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "list",
+          "value": "REPLACE_WITH_DRIVE_FOLDER_ID"
+        },
+        "event": "fileCreatedUpdated"
+      },
+      "id": "drive-trigger",
+      "name": "Google Drive Trigger",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": { "id": "1", "name": "Google Drive account" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "={{ $json.id }}" },
+        "options": { "googleFileConversion": { "conversion": { "docsToFormat": "text/plain" } } }
+      },
+      "id": "drive-download",
+      "name": "Download File",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [460, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": { "id": "1", "name": "Google Drive account" }
+      }
+    },
+    {
+      "parameters": { "operation": "text", "options": {} },
+      "id": "extract-text",
+      "name": "Extract Document Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: $json.text, source: $('Google Drive Trigger').item.json.name, metadata: { drive_id: $('Google Drive Trigger').item.json.id, modified: $('Google Drive Trigger').item.json.modifiedTime } }) }}",
+        "options": {}
+      },
+      "id": "post-ingest",
+      "name": "Send to RAG /ingest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Google Drive Trigger": { "main": [[{ "node": "Download File", "type": "main", "index": 0 }]] },
+    "Download File": { "main": [[{ "node": "Extract Document Text", "type": "main", "index": 0 }]] },
+    "Extract Document Text": { "main": [[{ "node": "Send to RAG /ingest", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
